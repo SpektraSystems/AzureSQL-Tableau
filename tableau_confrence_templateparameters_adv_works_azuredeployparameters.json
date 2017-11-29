@@ -1,0 +1,27 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "managementVm": {
+            "value": "GEN-UNIQUE-5"
+        },
+        "managementVmUsername": {
+            "value": "GEN-UNIQUE-6"
+        },
+        "managementVmPassword": {
+            "value": "GEN-PASSWORD"
+        },
+        "serverName":{
+            "value": "GEN-UNIQUE-12"
+        },
+        "storageKey":{
+            "value":"JJ09DgimW0fUtcdlM50aOjPzagsmJr8qCqM51Vm4wUpUSkMaoEqj9hpLDNu2ij2EoHz7rHwSdk6RO2S/xT3Wkg=="
+        },
+        "serverLogin": {
+            "value": "GEN-UNIQUE-5"
+        },
+        "serverPassword": {
+            "value": "GEN-PASSWORD"
+        }
+    }
+}

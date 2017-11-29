@@ -1,0 +1,376 @@
+{  
+   "$schema":"https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+   "contentVersion":"1.0.0.0",
+   "parameters":{  
+      "managementVm":{  
+         "type":"string",
+         "metadata":{  
+            "description":"Name of Management VM"
+         }
+      },
+      "managementVmUsername":{  
+         "type":"string",
+         "metadata":{  
+            "description":"Username of Management VM"
+         }
+      },
+      "managementVmPassword":{  
+         "type":"securestring",
+         "minLength":12,
+         "metadata":{  
+            "description":"Password for the user of Management VM"
+         }
+      },
+      "serverName":{  
+         "type":"string",
+         "metadata":{  
+            "description":"Name of SQL Server with databases"
+         }
+      },
+      "storageKey":{  
+         "type":"securestring",
+         "minLength":12
+      },
+      "serverLogin":{  
+         "type":"string",
+         "metadata":{  
+            "description":"Server Login Name"
+         }
+      },
+      "serverPassword":{  
+         "type":"securestring",
+         "minLength":12,
+         "metadata":{  
+            "description":"Server Login Password"
+         }
+      }
+   },
+   "variables":{  
+      "db1DatasetUri":"https://spektraazurelabs.blob.core.windows.net/bigdata/AdventureWorks2014FullForAzure.bacpac",
+      "db2DatasetUri":"https://spektraazurelabs.blob.core.windows.net/bigdata/AdventureWorks2014FullForAzure.bacpac",
+      "db1Name":"AdventureWorksDB1",
+      "db2Name":"AdventureWorksDB2",
+      "virtualNetworkName":"managementvm-vnet",
+      "addressPrefix":"10.0.0.0/16",
+      "managementSubnetPrefix":"10.0.3.0/24",
+      "managementNsgName":"management-nsg",
+      "managementSubnetName":"management-subnet",
+      "storageAccountType":"Standard_LRS",
+      "managementVmStorageAccName":"[concat('mgmtstr', uniqueString(resourceGroup().id))]",
+      "managementVmPip":"[concat('managementvmpip', uniqueString(resourceGroup().id))]",
+      "managementVmNicName":"[concat(parameters('managementVm'), '-nic')]"
+   },
+   "resources":[  
+      {  
+         "type":"Microsoft.Network/networkSecurityGroups",
+         "name":"[variables('managementNsgName')]",
+         "apiVersion":"2016-03-30",
+         "location":"[resourceGroup().location]",
+         "comments":"This will have firewall rules for Management VM",
+         "tags":{  
+            "displayName":"Management NSG"
+         },
+         "properties":{  
+            "securityRules":[  
+               {  
+                  "name":"rdp",
+                  "properties":{  
+                     "description":"Allow RDP",
+                     "protocol":"Tcp",
+                     "sourcePortRange":"*",
+                     "destinationPortRange":"3389",
+                     "sourceAddressPrefix":"0.0.0.0/0",
+                     "destinationAddressPrefix":"*",
+                     "access":"Allow",
+                     "priority":101,
+                     "direction":"Inbound"
+                  }
+               }
+            ]
+         }
+      },
+      {  
+         "type":"Microsoft.Network/virtualNetworks",
+         "name":"[variables('virtualNetworkName')]",
+         "apiVersion":"2016-03-30",
+         "location":"[resourceGroup().location]",
+         "comments":"This Virtual Network contains all the VMs needed",
+         "tags":{  
+            "displayName":" Virtual Network"
+         },
+         "dependsOn":[  
+            "[concat('Microsoft.Network/networkSecurityGroups/', variables('managementNsgName'))]"
+         ],
+         "properties":{  
+            "addressSpace":{  
+               "addressPrefixes":[  
+                  "[variables('addressPrefix')]"
+               ]
+            },
+            "subnets":[  
+               {  
+                  "name":"[variables('managementSubnetName')]",
+                  "properties":{  
+                     "addressPrefix":"[variables('managementSubnetPrefix')]",
+                     "networkSecurityGroup":{  
+                        "id":"[resourceId('Microsoft.Network/networkSecurityGroups', variables('managementNsgName'))]"
+                     }
+                  }
+               }
+            ]
+         }
+      },
+      {  
+         "type":"Microsoft.Storage/storageAccounts",
+         "name":"[variables('managementVmStorageAccName')]",
+         "apiVersion":"2015-06-15",
+         "location":"[resourceGroup().location]",
+         "comments":"Management VM Storage Account",
+         "properties":{  
+            "accountType":"[variables('storageAccountType')]"
+         }
+      },
+      {  
+         "apiVersion":"2016-03-30",
+         "type":"Microsoft.Network/publicIPAddresses",
+         "name":"[variables('managementVmPip')]",
+         "location":"[resourceGroup().location]",
+         "comments":"Management VM Public IP Address",
+         "properties":{  
+            "publicIPAllocationMethod":"Dynamic",
+            "idleTimeoutInMinutes":4,
+            "dnsSettings":{  
+               "domainNameLabel":"[concat(variables('managementVmPip'))]"
+            }
+         }
+      },
+      {  
+         "apiVersion":"2016-03-30",
+         "type":"Microsoft.Network/networkInterfaces",
+         "name":"[variables('managementVmNicName')]",
+         "location":"[resourceGroup().location]",
+         "comments":"Management VM nic name",
+         "dependsOn":[  
+            "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]",
+            "[concat('Microsoft.Network/publicIPAddresses/', variables('managementVmPip'))]"
+         ],
+         "properties":{  
+            "ipConfigurations":[  
+               {  
+                  "name":"ipconfig1",
+                  "properties":{  
+                     "privateIPAllocationMethod":"Dynamic",
+                     "publicIPAddress":{  
+                        "id":"[resourceId('Microsoft.Network/publicIPAddresses',variables('managementVmPip'))]"
+                     },
+                     "subnet":{  
+                        "id":"[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), variables('managementSubnetName'))]"
+                     }
+                  }
+               }
+            ]
+         }
+      },
+      {  
+         "apiVersion":"2015-06-15",
+         "type":"Microsoft.Compute/virtualMachines",
+         "name":"[parameters('managementVm')]",
+         "location":"[resourceGroup().location]",
+         "comments":"Management VM",
+         "dependsOn":[  
+            "[concat('Microsoft.Storage/storageAccounts/', variables('managementVmStorageAccName'))]",
+            "[concat('Microsoft.Network/networkInterfaces/', variables('managementVmNicName'))]"
+         ],
+         "properties":{  
+            "hardwareProfile":{  
+               "vmSize":"Standard_A2_v2"
+            },
+            "osProfile":{  
+               "computerName":"[parameters('managementVm')]",
+               "adminUsername":"[parameters('managementVmUsername')]",
+               "adminPassword":"[parameters('managementVmPassword')]"
+            },
+            "storageProfile":{  
+               "imageReference":{  
+                  "publisher":"MicrosoftWindowsServer",
+                  "offer":"WindowsServer",
+                  "sku":"2012-R2-Datacenter",
+                  "version":"latest"
+               },
+               "osDisk":{  
+                  "name":"osdisk",
+                  "vhd":{  
+                     "uri":"[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('managementVmStorageAccName')),'2016-01-01').primaryEndpoints.blob,'vhds/', parameters('managementVm'),'-','vmOSDisk','.vhd')]"
+                  },
+                  "caching":"ReadWrite",
+                  "createOption":"FromImage"
+               },
+               "dataDisks":[  
+
+               ]
+            },
+            "networkProfile":{  
+               "networkInterfaces":[  
+                  {  
+                     "id":"[resourceId('Microsoft.Network/networkInterfaces',variables('managementVmNicName'))]"
+                  }
+               ]
+            }
+         }
+      },
+      {  
+         "type":"Microsoft.Compute/virtualMachines/extensions",
+         "name":"[concat(parameters('managementVm'),'/install_desktop_client_Extension')]",
+         "apiVersion":"2015-06-15",
+         "location":"[resourceGroup().location]",
+         "dependsOn":[  
+            "[concat('Microsoft.Compute/virtualMachines/', parameters('managementVm'))]"
+         ],
+         "properties":{  
+            "publisher":"Microsoft.Compute",
+            "type":"CustomScriptExtension",
+            "typeHandlerVersion":"1.3",
+            "autoUpgradeMinorVersion":"true",
+            "settings":{  
+               "fileUris":[  
+                  "https://spektraazurelabs.blob.core.windows.net/tableauconf/Install_Tools.ps1"
+               ],
+               "commandToExecute":"powershell.exe -ExecutionPolicy Unrestricted -File Install_Tools.ps1"
+            }
+         }
+      },
+      {  
+         "type":"Microsoft.Sql/servers",
+         "apiVersion":"2014-04-01",
+         "location":"[resourceGroup().location]",
+         "name":"[parameters('serverName')]",
+         "properties":{  
+            "administratorLogin":"[parameters('serverLogin')]",
+            "administratorLoginPassword":"[parameters('serverPassword')]",
+            "version":"12.0"
+         },
+         "resources":[  
+            {  
+               "type":"databases",
+               "name":"[variables('db1Name')]",
+               "location":"[resourceGroup().location]",
+               "apiVersion":"2014-04-01",
+               "dependsOn":[  
+                  "[concat('Microsoft.Sql/servers/', parameters('serverName'))]"
+               ],
+               "properties":{  
+                  "collation":"SQL_Latin1_General_CP1_CI_AS"
+               },
+               "resources":[  
+                  {  
+                     "name":"import1",
+                     "type":"extensions",
+                     "apiVersion":"2014-04-01",
+                     "properties":{  
+                        "operationMode":"Import",
+                        "storageKey":"[parameters('storageKey')]",
+                        "storageKeyType":"Primary",
+                        "administratorLogin":"[parameters('serverLogin')]",
+                        "administratorLoginPassword":"[parameters('serverPassword')]",
+                        "storageUri":"[variables('db1DatasetUri')]"
+                     },
+                     "dependsOn":[  
+                        "[resourceId('Microsoft.Sql/servers/databases', parameters('serverName'), variables('db1Name'))]"
+                     ]
+                  }
+               ]
+            },
+            {  
+               "type":"databases",
+               "name":"[variables('db2Name')]",
+               "location":"[resourceGroup().location]",
+               "apiVersion":"2014-04-01",
+               "dependsOn":[  
+                  "[concat('Microsoft.Sql/servers/', parameters('serverName'))]"
+               ],
+               "properties":{  
+                  "collation":"SQL_Latin1_General_CP1_CI_AS"
+               },
+               "resources":[  
+                  {  
+                     "name":"import2",
+                     "type":"extensions",
+                     "apiVersion":"2014-04-01",
+                     "properties":{  
+                        "operationMode":"Import",
+                        "storageKey":"[parameters('storageKey')]",
+                        "storageKeyType":"Primary",
+                        "administratorLogin":"[parameters('serverLogin')]",
+                        "administratorLoginPassword":"[parameters('serverPassword')]",
+                        "storageUri":"[variables('db2DatasetUri')]"
+                     },
+                     "dependsOn":[  
+                        "[resourceId('Microsoft.Sql/servers/databases', parameters('serverName'), variables('db2Name'))]"
+                     ]
+                  }
+               ]
+            }
+         ]
+      },
+      {  
+         "type":"Microsoft.Sql/servers/firewallrules",
+         "apiVersion":"2014-04-01",
+         "dependsOn":[  
+            "[concat('Microsoft.Sql/servers/', parameters('serverName'))]"
+         ],
+         "location":"[resourceGroup().location]",
+         "name":"[concat(parameters('serverName'), '/', 'AllowAllIps')]",
+         "properties":{  
+            "endIpAddress":"255.255.255.255",
+            "startIpAddress":"0.0.0.0"
+         }
+      },
+       {  
+         "type":"Microsoft.Sql/servers/firewallrules",
+         "apiVersion":"2014-04-01",
+         "dependsOn":[  
+            "[concat('Microsoft.Sql/servers/', parameters('serverName'))]"
+         ],
+         "location":"[resourceGroup().location]",
+         "name":"[concat(parameters('serverName'), '/', 'AllowAllWindowsAzureIps')]",
+         "properties":{  
+            "startIpAddress": "0.0.0.0",
+            "endIpAddress": "0.0.0.0"
+         }
+      }
+   ],
+   "outputs":{  
+      "SQLServerDNSName":{  
+         "value":"[concat(parameters('serverName'),'.database.windows.net')]",
+         "type":"string"
+      },
+      "DatabaseAdministratorLogin":{  
+         "value":"[parameters('serverLogin')]",
+         "type":"string"
+      },
+      "DatabaseAdminstratorLoginPassword":{  
+         "value":"[parameters('serverPassword')]",
+         "type":"string"
+      },
+      "DataBase1Name":{  
+         "value":"[variables('db1Name')]",
+         "type":"string"
+      },
+      "DataBase2Name":{  
+         "value":"[variables('db2Name')]",
+         "type":"string"
+      },
+      "jumpVMDNSName":{  
+         "value":"[reference(resourceId('Microsoft.Network/publicIPAddresses',variables('managementVmPip'))).dnsSettings.fqdn]",
+         "type":"string"
+      },
+      "jumpVMUserName":{  
+         "value":"[parameters('managementVmUsername')]",
+         "type":"string"
+      },
+      "jumpVMPassword":{  
+         "value":"[parameters('managementVmPassword')]",
+         "type":"string"
+      }
+   }
+}
